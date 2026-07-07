@@ -43,6 +43,7 @@ export class OAuthConsentController {
 					resourceName: consentDetails.resourceName,
 					scopes: consentDetails.scopes,
 					requestedScopes: consentDetails.requestedScopes,
+					scopeTools: consentDetails.scopeTools,
 				},
 			});
 		} catch (error) {

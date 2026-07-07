@@ -155,6 +155,29 @@ describe('OAuthConsentService', () => {
 			});
 		});
 
+		it('should include the resource scope-tools mapping when available', async () => {
+			const sessionToken = 'valid-session-token';
+			const sessionPayload = {
+				clientId: 'client-123',
+				redirectUri: 'https://example.com/callback',
+				codeChallenge: 'challenge',
+				state: null,
+			};
+			const client = mock<OAuthClient>({ id: 'client-123', name: 'Test Client' });
+			const scopeTools = { 'workflow:read': ['search_workflows', 'get_workflow_details'] };
+
+			oauthSessionService.verifySession.mockReturnValue(sessionPayload);
+			oauthClientRepository.findOne.mockResolvedValue(client);
+			protectedResourceRegistry.getDefaultResource.mockReturnValue({
+				scopes: INSTANCE_SCOPES,
+				getScopeTools: () => scopeTools,
+			} as unknown as ProtectedResource);
+
+			const result = await service.getConsentDetails(sessionToken);
+
+			expect(result).toMatchObject({ ok: true, scopeTools });
+		});
+
 		it('should pass through the requested scopes from the session', async () => {
 			const sessionToken = 'valid-session-token';
 			const sessionPayload = {

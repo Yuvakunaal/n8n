@@ -21,6 +21,8 @@ type ConsentDetailsResult =
 			scopes: string[];
 			/** Scopes the client asked for, to preselect in the picker. */
 			requestedScopes?: string[];
+			/** Tool names each scope unlocks, shown per scope group in the picker. */
+			scopeTools?: Record<string, string[]>;
 	  }
 	| { ok: false; reason: 'resource_unavailable' };
 
@@ -73,16 +75,20 @@ export class OAuthConsentService {
 					redirectUri: sessionPayload.redirectUri,
 					scopes: resource.scopes,
 					requestedScopes: sessionPayload.requestedScopes,
+					scopeTools: resource.getScopeTools?.(),
 				};
 			}
+
+			const defaultResource = this.protectedResourceRegistry.getDefaultResource();
 
 			return {
 				ok: true,
 				clientName: client.name,
 				clientId: client.id,
 				redirectUri: sessionPayload.redirectUri,
-				scopes: this.protectedResourceRegistry.getDefaultResource()?.scopes ?? [],
+				scopes: defaultResource?.scopes ?? [],
 				requestedScopes: sessionPayload.requestedScopes,
+				scopeTools: defaultResource?.getScopeTools?.(),
 			};
 		} catch (error) {
 			this.logger.error('Error getting consent details', { error });
