@@ -104,7 +104,7 @@ function onRevoke() {
 </script>
 
 <template>
-	<N8nDialog :open="open" size="medium" @update:open="emit('update:open', $event)">
+	<N8nDialog :open="open" size="xlarge" @update:open="emit('update:open', $event)">
 		<div v-if="client" :class="$style.container" data-test-id="mcp-client-details-modal">
 			<N8nDialogHeader>
 				<N8nDialogTitle>
@@ -263,12 +263,14 @@ function onRevoke() {
 	display: flex;
 	flex-direction: column;
 	gap: var(--spacing--sm);
+	min-width: 0;
 }
 
 .access-group {
 	display: flex;
 	align-items: flex-start;
 	gap: var(--spacing--sm);
+	min-width: 0;
 }
 
 .access-group-label {
@@ -276,6 +278,7 @@ function onRevoke() {
 	align-items: center;
 	gap: var(--spacing--3xs);
 	min-width: 110px;
+	flex-shrink: 0;
 	padding-top: var(--spacing--5xs);
 }
 
@@ -287,11 +290,15 @@ function onRevoke() {
 	display: flex;
 	flex-direction: column;
 	gap: var(--spacing--2xs);
+	flex: 1;
+	min-width: 0;
 }
 
 .scope-row {
 	display: flex;
 	align-items: center;
+	/* wrap the badge under the token on narrow widths instead of clipping */
+	flex-wrap: wrap;
 	gap: var(--spacing--2xs);
 }
 
@@ -310,6 +317,7 @@ function onRevoke() {
 .access-badge {
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
+	flex-shrink: 0;
 }
 
 /* the shared tooltip caps content at 180px and centers it; tool identifiers need more room */
