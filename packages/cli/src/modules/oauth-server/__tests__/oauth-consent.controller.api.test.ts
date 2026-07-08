@@ -85,6 +85,7 @@ describe('GET /rest/consent/details', () => {
 			displayName: 'My Named Workflow',
 			getResourceUrl: () => resourceUrl,
 			getAudiences: () => [resourceUrl],
+			authorize: async () => true,
 			scopes: [],
 		});
 

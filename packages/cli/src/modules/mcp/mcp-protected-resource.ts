@@ -6,6 +6,7 @@ import { BUILDER_TOOLS, TOOLS_BY_SCOPE } from './mcp-scopes';
 import { McpSettingsService } from './mcp.settings.service';
 import type { ProtectedResource } from '@/services/protected-resource.registry';
 import { UrlService } from '@/services/url.service';
+import type { User } from '@n8n/db';
 
 export const INSTANCE_MCP_RESOURCE_ID = 'instance-mcp';
 
@@ -81,5 +82,12 @@ export class McpProtectedResource implements ProtectedResource {
 
 	async getAllowedRedirectUris(): Promise<string[]> {
 		return await this.mcpSettingsService.getAllowedRedirectUris();
+	}
+
+	async authorize(_user: User): Promise<boolean> {
+		// The instance MCP server has no per-user authorization rule: any
+		// authenticated user may access it while the server is enabled, and all
+		// users are denied when it is disabled.
+		return await this.mcpSettingsService.getEnabled();
 	}
 }
