@@ -272,3 +272,5 @@ export type { EncryptionKeyResponseDto } from './encryption/encryption-key-respo
 
 export { UpdateOtelSettingsDto } from './otel/update-otel-settings.dto';
 export { TestOtelConnectionDto } from './otel/test-otel-connection.dto';
+
+export { InstanceAiExamplesQueryDto } from './instance-ai-examples/instance-ai-examples-query.dto';
