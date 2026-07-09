@@ -159,61 +159,55 @@ function onRevoke() {
 					{{ i18n.baseText('settings.mcp.oAuthClients.details.access') }}
 				</N8nText>
 				<div :class="$style.access" data-test-id="mcp-client-details-access">
-					<N8nText v-if="client.scopes === null" color="text-dark" size="small">
-						{{ i18n.baseText('settings.mcp.oAuthClients.scope.fullAccess') }}
-					</N8nText>
-					<template v-else>
-						<div
-							v-for="group in accessGroups"
-							:key="group.resource"
-							:class="$style['access-group']"
-							:data-test-id="`mcp-client-details-group-${group.resource}`"
-						>
-							<div :class="$style['access-group-label']">
-								<N8nIcon :icon="group.icon" size="small" :class="$style['access-group-icon']" />
-								<N8nText color="text-dark" size="small">{{ group.label }}</N8nText>
-							</div>
-							<div :class="$style['scope-list']">
-								<div v-for="entry in group.scopes" :key="entry.scope" :class="$style['scope-row']">
-									<N8nTooltip
-										:disabled="entry.tools.length === 0"
-										placement="top"
-										:show-after="150"
-										:content-class="$style['tools-tooltip']"
-									>
-										<template #content>
-											<div :class="$style['tools-popover']">
-												<div :class="$style['tools-popover-header']">
-													{{
-														i18n.baseText('settings.mcp.oAuthClients.details.enablesTools', {
-															adjustToNumber: entry.tools.length,
-															interpolate: { count: entry.tools.length },
-														})
-													}}
-												</div>
-												<div v-for="tool in entry.tools" :key="tool" :class="$style['tool-row']">
-													<N8nIcon icon="wrench" size="xsmall" :class="$style['tool-icon']" />
-													<span :class="$style['tool-name']">{{ tool }}</span>
-												</div>
+					<div
+						v-for="group in accessGroups"
+						:key="group.resource"
+						:class="$style['access-group']"
+						:data-test-id="`mcp-client-details-group-${group.resource}`"
+					>
+						<div :class="$style['access-group-label']">
+							<N8nIcon :icon="group.icon" size="small" :class="$style['access-group-icon']" />
+							<N8nText color="text-dark" size="small">{{ group.label }}</N8nText>
+						</div>
+						<div :class="$style['scope-list']">
+							<div v-for="entry in group.scopes" :key="entry.scope" :class="$style['scope-row']">
+								<N8nTooltip
+									:disabled="entry.tools.length === 0"
+									placement="top"
+									:show-after="150"
+									:content-class="$style['tools-tooltip']"
+								>
+									<template #content>
+										<div :class="$style['tools-popover']">
+											<div :class="$style['tools-popover-header']">
+												{{
+													i18n.baseText('settings.mcp.oAuthClients.details.enablesTools', {
+														adjustToNumber: entry.tools.length,
+														interpolate: { count: entry.tools.length },
+													})
+												}}
 											</div>
-										</template>
-										<span :class="$style['scope-token']" tabindex="0">{{ entry.scope }}</span>
-									</N8nTooltip>
-									<N8nBadge
-										:theme="entry.access === 'read' ? 'default' : 'danger'"
-										:class="$style['access-badge']"
-									>
-										{{
-											i18n.baseText(
-												`settings.mcp.oAuthClients.details.badge.${entry.access}` as BaseTextKey,
-											)
-										}}
-									</N8nBadge>
-								</div>
+											<div v-for="tool in entry.tools" :key="tool" :class="$style['tool-row']">
+												<N8nIcon icon="wrench" size="xsmall" :class="$style['tool-icon']" />
+												<span :class="$style['tool-name']">{{ tool }}</span>
+											</div>
+										</div>
+									</template>
+									<span :class="$style['scope-token']" tabindex="0">{{ entry.scope }}</span>
+								</N8nTooltip>
+								<N8nBadge
+									:theme="entry.access === 'read' ? 'default' : 'danger'"
+									:class="$style['access-badge']"
+								>
+									{{
+										i18n.baseText(
+											`settings.mcp.oAuthClients.details.badge.${entry.access}` as BaseTextKey,
+										)
+									}}
+								</N8nBadge>
 							</div>
 						</div>
-					</template>
-				</div>
+					</div>				</div>
 			</div>
 
 			<N8nDialogFooter>

@@ -616,7 +616,6 @@ describe('OAuthServerService', () => {
 			} as AuthorizationCode;
 
 			authorizationCodeService.findAuthorizationCode.mockResolvedValue(authRecord);
-			tokenService.resolveGrantedScopes.mockResolvedValue(['workflow:read']);
 			tokenService.generateTokenPair.mockReturnValue({
 				accessToken: 'access-token-123',
 				refreshToken: 'refresh-token-456',
@@ -638,10 +637,6 @@ describe('OAuthServerService', () => {
 			);
 			expect(authorizationCodeService.markAuthorizationCodeAsUsed).toHaveBeenCalledWith(
 				'auth-code-123',
-			);
-			expect(tokenService.resolveGrantedScopes).toHaveBeenCalledWith(
-				['workflow:read'],
-				'https://n8n.example.com/mcp-server/http',
 			);
 			expect(tokenService.generateTokenPair).toHaveBeenCalledWith(
 				'user-456',
@@ -686,7 +681,6 @@ describe('OAuthServerService', () => {
 			} as AuthorizationCode;
 
 			authorizationCodeService.findAuthorizationCode.mockResolvedValue(authRecord);
-			tokenService.resolveGrantedScopes.mockResolvedValue(['workflow:read']);
 			tokenService.generateTokenPair.mockReturnValue({
 				accessToken: 'access-token-123',
 				refreshToken: 'refresh-token-456',
