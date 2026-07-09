@@ -370,9 +370,12 @@ describe('OAuthConsentService', () => {
 			userConsentRepository.upsert.mockResolvedValue(mock());
 			authorizationCodeService.createAuthorizationCode.mockResolvedValue(authCode);
 
-			const result = await service.handleConsentDecision(sessionToken, mock<User>({ id: userId }), true, [
-				'workflow:read',
-			]);
+			const result = await service.handleConsentDecision(
+				sessionToken,
+				mock<User>({ id: userId }),
+				true,
+				['workflow:read'],
+			);
 
 			expect(result.redirectUrl).toContain('code=generated-auth-code');
 			expect(result.redirectUrl).toContain('state=state-xyz');
@@ -526,9 +529,12 @@ describe('OAuthConsentService', () => {
 			userConsentRepository.upsert.mockResolvedValue(mock());
 			authorizationCodeService.createAuthorizationCode.mockResolvedValue(authCode);
 
-			const result = await service.handleConsentDecision(sessionToken, mock<User>({ id: userId }), true, [
-				'workflow:read',
-			]);
+			const result = await service.handleConsentDecision(
+				sessionToken,
+				mock<User>({ id: userId }),
+				true,
+				['workflow:read'],
+			);
 
 			expect(result.redirectUrl).toContain('code=generated-auth-code');
 			expect(result.redirectUrl).not.toContain('state=');
