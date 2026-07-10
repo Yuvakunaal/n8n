@@ -1,10 +1,17 @@
 import { LicenseState } from '@n8n/backend-common';
 import { testDb, testModules } from '@n8n/backend-test-utils';
 import type { User } from '@n8n/db';
-import { FolderRepository, ProjectRelationRepository, ProjectRepository } from '@n8n/db';
+import {
+	FolderRepository,
+	ProjectRelationRepository,
+	ProjectRepository,
+	SharedWorkflowRepository,
+	WorkflowRepository,
+} from '@n8n/db';
 import { Container } from '@n8n/di';
 
 import { ForbiddenError } from '@/errors/response-errors/forbidden.error';
+import { UnprocessableRequestError } from '@/errors/response-errors/unprocessable.error';
 import { createOwner } from '@test-integration/db/users';
 import { LicenseMocker } from '@test-integration/license';
 
@@ -12,12 +19,19 @@ import { N8nPackagesService } from '../n8n-packages.service';
 import type { ImportPackageRequest } from '../n8n-packages.types';
 import {
 	buildEntityPackageBuffer,
+	credentialRequirementsFromWorkflows,
 	serializedFolder,
 	serializedProject,
 	serializedWorkflow,
+	serializedWorkflowWithCredential,
 } from './fixtures/package-fixtures';
 
-async function importProjects(user: User, packageBuffer: Buffer, apiKeyScopes?: string[]) {
+async function importProjects(
+	user: User,
+	packageBuffer: Buffer,
+	apiKeyScopes?: string[],
+	overrides?: Partial<ImportPackageRequest>,
+) {
 	const request: ImportPackageRequest = {
 		user,
 		packageBuffer,
@@ -28,6 +42,7 @@ async function importProjects(user: User, packageBuffer: Buffer, apiKeyScopes?: 
 		workflowPublishingPolicy: 'preserve-published-state',
 		workflowIdPolicy: 'new',
 		folderConflictPolicy: 'merge',
+		...overrides,
 	};
 	return await Container.get(N8nPackagesService).importPackage(request);
 }
@@ -36,6 +51,20 @@ const licenseMocker = new LicenseMocker();
 
 async function findProject(id: string) {
 	return await Container.get(ProjectRepository).findOne({ where: { id } });
+}
+
+async function findFolder(id: string) {
+	return await Container.get(FolderRepository).findOne({
+		where: { id },
+		relations: { homeProject: true },
+	});
+}
+
+async function findWorkflow(id: string) {
+	return await Container.get(WorkflowRepository).findOne({
+		where: { id },
+		relations: { parentFolder: true },
+	});
 }
 
 async function isAdminOf(projectId: string, userId: string): Promise<boolean> {
@@ -50,7 +79,7 @@ beforeAll(async () => {
 	await testDb.init();
 	licenseMocker.mockLicenseState(Container.get(LicenseState));
 	licenseMocker.setDefaults({
-		features: ['feat:projectRole:admin'],
+		features: ['feat:projectRole:admin', 'feat:folders'],
 		quotas: { 'quota:maxTeamProjects': 100 },
 	});
 });
@@ -178,30 +207,172 @@ describe('project shell import', () => {
 		await expect(importProjects(owner, packageBuffer)).rejects.toBeInstanceOf(ForbiddenError);
 	});
 
-	it('ignores folders and workflows nested inside the project (deferred to a follow-up)', async () => {
+	it('recreates the project folder tree and places nested workflows into the project scope', async () => {
 		const packageBuffer = await buildEntityPackageBuffer({
 			projects: [
-				{ target: 'projects/brie', project: serializedProject({ id: 'P1', name: 'brie' }) },
+				{
+					target: 'projects/team-ligo',
+					project: serializedProject({ id: 'P1', name: 'team-ligo' }),
+				},
 			],
 			folders: [
+				// An empty folder shell alongside a populated, nested hierarchy.
 				{
-					target: 'projects/brie/folders/in_progress',
-					folder: serializedFolder({ id: 'NestedFolder', name: 'in_progress' }),
+					target: 'projects/team-ligo/folders/to_production',
+					folder: serializedFolder({ id: 'TP', name: 'to_production' }),
+				},
+				{
+					target: 'projects/team-ligo/folders/in_progress',
+					folder: serializedFolder({ id: 'IP', name: 'in_progress' }),
+				},
+				{
+					target: 'projects/team-ligo/folders/in_progress/nested',
+					folder: serializedFolder({ id: 'NE', name: 'nested', parentFolderId: 'IP' }),
 				},
 			],
 			workflows: [
 				{
-					target: 'projects/brie/folders/in_progress/workflows/triage',
-					workflow: serializedWorkflow({ id: 'NestedWf', name: 'triage' }),
+					target: 'projects/team-ligo/folders/in_progress/workflows/triage',
+					workflow: serializedWorkflow({ id: 'WF1', name: 'triage' }),
+				},
+				{
+					target: 'projects/team-ligo/folders/in_progress/nested/workflows/playground',
+					workflow: serializedWorkflow({ id: 'WF2', name: 'playground' }),
 				},
 			],
 		});
 
 		const result = await importProjects(owner, packageBuffer);
 
-		expect(result.projects.map((p) => p.localId)).toEqual(['P1']);
-		expect(result.folders).toEqual([]);
-		expect(result.workflows).toEqual([]);
-		expect(await Container.get(FolderRepository).findOneBy({ id: 'NestedFolder' })).toBeNull();
+		expect(result.projects).toEqual([
+			{ sourceProjectId: 'P1', localId: 'P1', name: 'team-ligo', status: 'created' },
+		]);
+		// Every folder (incl. the empty shell) lands in the project; the nested one keeps its parent.
+		for (const id of ['TP', 'IP', 'NE']) {
+			expect((await findFolder(id))?.homeProject.id).toBe('P1');
+		}
+		expect((await findFolder('NE'))?.parentFolderId).toBe('IP');
+		// Each workflow is placed under the folder it belongs to, scoped to the project.
+		const triage = result.workflows.find((w) => w.sourceWorkflowId === 'WF1')!;
+		const playground = result.workflows.find((w) => w.sourceWorkflowId === 'WF2')!;
+		expect(triage.projectId).toBe('P1');
+		expect((await findWorkflow(triage.localId))?.parentFolder?.id).toBe('IP');
+		expect((await findWorkflow(playground.localId))?.parentFolder?.id).toBe('NE');
+	});
+
+	it('populates each project in a multi-project package into its own scope', async () => {
+		const packageBuffer = await buildEntityPackageBuffer({
+			projects: [
+				{ target: 'projects/brie', project: serializedProject({ id: 'P1', name: 'brie' }) },
+				{ target: 'projects/stilton', project: serializedProject({ id: 'P2', name: 'stilton' }) },
+			],
+			folders: [
+				{ target: 'projects/brie/folders/a', folder: serializedFolder({ id: 'FA', name: 'a' }) },
+				{ target: 'projects/stilton/folders/b', folder: serializedFolder({ id: 'FB', name: 'b' }) },
+			],
+			workflows: [
+				{
+					target: 'projects/brie/folders/a/workflows/wfa',
+					workflow: serializedWorkflow({ id: 'WFA', name: 'wfa' }),
+				},
+				{
+					target: 'projects/stilton/folders/b/workflows/wfb',
+					workflow: serializedWorkflow({ id: 'WFB', name: 'wfb' }),
+				},
+			],
+		});
+
+		const result = await importProjects(owner, packageBuffer);
+
+		expect(result.projects.map((p) => p.localId).sort()).toEqual(['P1', 'P2']);
+		expect((await findFolder('FA'))?.homeProject.id).toBe('P1');
+		expect((await findFolder('FB'))?.homeProject.id).toBe('P2');
+		const wfa = result.workflows.find((w) => w.sourceWorkflowId === 'WFA')!;
+		const wfb = result.workflows.find((w) => w.sourceWorkflowId === 'WFB')!;
+		expect(wfa.projectId).toBe('P1');
+		expect(wfb.projectId).toBe('P2');
+		expect((await findWorkflow(wfa.localId))?.parentFolder?.id).toBe('FA');
+		expect((await findWorkflow(wfb.localId))?.parentFolder?.id).toBe('FB');
+	});
+
+	it('reuses the project and folder and updates the workflow on re-import', async () => {
+		const pkg = async () =>
+			await buildEntityPackageBuffer({
+				projects: [
+					{ target: 'projects/brie', project: serializedProject({ id: 'P1', name: 'brie' }) },
+				],
+				folders: [
+					{ target: 'projects/brie/folders/a', folder: serializedFolder({ id: 'FA', name: 'a' }) },
+				],
+				workflows: [
+					{
+						target: 'projects/brie/folders/a/workflows/wf',
+						workflow: serializedWorkflow({ id: 'WF', name: 'wf' }),
+					},
+				],
+			});
+
+		const first = await importProjects(owner, await pkg());
+		const localId = first.workflows[0].localId;
+
+		const second = await importProjects(owner, await pkg());
+
+		expect(second.workflows[0]).toMatchObject({ status: 'updated', localId, parentFolderId: 'FA' });
+		expect(await Container.get(ProjectRepository).count({ where: { type: 'team' } })).toBe(1);
+		expect(await Container.get(FolderRepository).countBy({ id: 'FA' })).toBe(1);
+		expect(await Container.get(WorkflowRepository).countBy({ id: localId })).toBe(1);
+	});
+
+	it('resolves a project workflow credential in the project scope, blocking when it is missing', async () => {
+		const workflow = serializedWorkflowWithCredential({
+			id: 'WF',
+			name: 'triage',
+			credentialId: 'missing-cred',
+			credentialName: 'Linear',
+		});
+		const packageBuffer = await buildEntityPackageBuffer({
+			projects: [
+				{ target: 'projects/brie', project: serializedProject({ id: 'P1', name: 'brie' }) },
+			],
+			folders: [
+				{ target: 'projects/brie/folders/a', folder: serializedFolder({ id: 'FA', name: 'a' }) },
+			],
+			workflows: [{ target: 'projects/brie/folders/a/workflows/triage', workflow }],
+			manifestExtras: {
+				requirements: { credentials: credentialRequirementsFromWorkflows([workflow]) },
+			},
+		});
+
+		// The project workflow's credential requirement resolves in the project scope; under must-preexist
+		// a missing credential blocks the content import (before the folder/workflow are written).
+		await expect(importProjects(owner, packageBuffer)).rejects.toBeInstanceOf(
+			UnprocessableRequestError,
+		);
+		expect(await findFolder('FA')).toBeNull();
+	});
+
+	it('imports a project-root workflow (no enclosing folder) at the project root', async () => {
+		const packageBuffer = await buildEntityPackageBuffer({
+			projects: [
+				{ target: 'projects/brie', project: serializedProject({ id: 'P1', name: 'brie' }) },
+			],
+			workflows: [
+				{
+					target: 'projects/brie/workflows/root-wf',
+					workflow: serializedWorkflow({ id: 'RWF', name: 'root-wf' }),
+				},
+			],
+		});
+
+		const result = await importProjects(owner, packageBuffer);
+
+		const summary = result.workflows.find((w) => w.sourceWorkflowId === 'RWF')!;
+		expect(summary).toMatchObject({ projectId: 'P1', parentFolderId: null });
+		// Persisted at the project root (no parent folder), owned by the imported project.
+		expect((await findWorkflow(summary.localId))?.parentFolder).toBeNull();
+		const shared = await Container.get(SharedWorkflowRepository).findOneBy({
+			workflowId: summary.localId,
+		});
+		expect(shared?.projectId).toBe('P1');
 	});
 });
