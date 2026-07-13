@@ -375,4 +375,43 @@ describe('project shell import', () => {
 		});
 		expect(shared?.projectId).toBe('P1');
 	});
+
+	it('gates the whole package: a later project blocking leaves earlier projects unwritten', async () => {
+		const blocked = serializedWorkflowWithCredential({
+			id: 'WFB',
+			name: 'wfb',
+			credentialId: 'missing-cred',
+			credentialName: 'Linear',
+		});
+		const packageBuffer = await buildEntityPackageBuffer({
+			projects: [
+				{ target: 'projects/alpha', project: serializedProject({ id: 'P1', name: 'alpha' }) },
+				{ target: 'projects/beta', project: serializedProject({ id: 'P2', name: 'beta' }) },
+			],
+			folders: [
+				{ target: 'projects/alpha/folders/a', folder: serializedFolder({ id: 'FA', name: 'a' }) },
+				{ target: 'projects/beta/folders/b', folder: serializedFolder({ id: 'FB', name: 'b' }) },
+			],
+			workflows: [
+				{
+					target: 'projects/alpha/folders/a/workflows/wfa',
+					workflow: serializedWorkflow({ id: 'WFA', name: 'wfa' }),
+				},
+				{ target: 'projects/beta/folders/b/workflows/wfb', workflow: blocked },
+			],
+			manifestExtras: {
+				requirements: { credentials: credentialRequirementsFromWorkflows([blocked]) },
+			},
+		});
+
+		// The second project's workflow needs a missing credential: every project is planned and gated
+		// before any content is applied, so the first project's folder/workflow must not have been written.
+		await expect(importProjects(owner, packageBuffer)).rejects.toBeInstanceOf(
+			UnprocessableRequestError,
+		);
+		expect(await findFolder('FA')).toBeNull();
+		expect(await findFolder('FB')).toBeNull();
+		// (Project shells are created before content planning — that residue is accepted; content is not.)
+		expect(await findProject('P1')).not.toBeNull();
+	});
 });

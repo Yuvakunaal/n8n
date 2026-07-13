@@ -8,6 +8,7 @@ import type { CredentialBindingRequest } from '../entities/credential/credential
 import { ProjectImporter } from '../entities/project/project-importer';
 import type { PackageReader } from '../io/package-reader';
 import type {
+	BlockingIssue,
 	ImportContext,
 	ImportedFolderSummary,
 	ImportedWorkflowSummary,
@@ -16,7 +17,13 @@ import type {
 	PackageImportBindings,
 } from '../n8n-packages.types';
 import { mergeBindings } from '../n8n-packages.types';
-import { ImportOrchestrator, type ImportOrchestrationResult } from './import-orchestrator';
+import { toImportBlockedError } from './import-blocked.error';
+import {
+	ImportOrchestrator,
+	type ImportOrchestrationInput,
+	type ImportOrchestrationResult,
+	type ImportPlan,
+} from './import-orchestrator';
 import {
 	assertPackageImportApiKeyScopes,
 	buildImportResult,
@@ -46,22 +53,51 @@ export class ProjectPackageImporter {
 		this.assertAdequatePermissions(request, manifest);
 
 		const projects = await this.packageParser.getProjects(reader);
-		const plan = await this.projectImporter.plan(request.user, projects);
-		const projectSummaries = await this.projectImporter.apply(request.user, plan);
+		const projectPlan = await this.projectImporter.plan(request.user, projects);
+		const projectSummaries = await this.projectImporter.apply(request.user, projectPlan);
+
+		// Plan every project's contents and gate the whole package before writing any of it, so a later
+		// project's blocking issue can't leave earlier projects partially imported.
+		const planned: Array<{ project: ManifestEntry; plan: ImportPlan }> = [];
+		const blockingIssues: BlockingIssue[] = [];
+		for (const project of manifest.projects ?? []) {
+			const input = await this.buildProjectImportInput(request, reader, manifest, project);
+			const plan = await this.importOrchestrator.plan(input);
+			planned.push({ project, plan });
+			blockingIssues.push(...plan.blockingIssues);
+		}
+		if (blockingIssues.length > 0) {
+			throw toImportBlockedError(blockingIssues);
+		}
 
 		const workflows: ImportedWorkflowSummary[] = [];
 		const folders: ImportedFolderSummary[] = [];
 		const scopedBindings: PackageImportBindings[] = [];
 		const matched: string[] = [];
 		const stubbed: string[] = [];
+		const applied: Array<{ input: ImportOrchestrationInput; imported: ImportOrchestrationResult }> =
+			[];
 
-		for (const project of manifest.projects ?? []) {
-			const imported = await this.importProjectContents(request, reader, manifest, project);
+		for (const { project, plan } of planned) {
+			const imported = await this.importOrchestrator.apply(plan);
 			workflows.push(...toImportedWorkflowSummaries(imported.workflowOutcomes, project.id));
 			folders.push(...imported.folderSummaries);
 			scopedBindings.push(imported.bindings);
 			matched.push(...imported.credentialResult.matched);
 			stubbed.push(...imported.credentialResult.stubbed);
+			applied.push({ input: plan.input, imported });
+		}
+
+		// Emit per project, but only once every project has been applied — a gated or failed run reports
+		// nothing rather than telemetry for a partial import.
+		for (const { input, imported } of applied) {
+			emitPackageImportedEvent(this.eventService, {
+				request,
+				context: input.context,
+				manifest,
+				imported,
+				credentialRequest: input.credentialRequest,
+			});
 		}
 
 		return buildImportResult({
@@ -74,12 +110,13 @@ export class ProjectPackageImporter {
 		});
 	}
 
-	private async importProjectContents(
+	/** Parses one project's scoped folders and workflows into an orchestration input (no writes). */
+	private async buildProjectImportInput(
 		request: ImportPackageRequest,
 		reader: PackageReader,
 		manifest: PackageManifest,
 		project: ManifestEntry,
-	): Promise<ImportOrchestrationResult> {
+	): Promise<ImportOrchestrationInput> {
 		const basePrefix = `${project.target}/`;
 		const folders = await this.packageParser.getFolders(reader, basePrefix);
 		const workflows = await this.packageParser.getWorkflows(reader, basePrefix);
@@ -91,25 +128,10 @@ export class ProjectPackageImporter {
 			credentialBindings: request.bindings?.credentials,
 		};
 
+		// The project is recreated under its source id, so scope to it; folders and workflows nest via
+		// the package hierarchy, not a request folderId.
 		const context: ImportContext = { user: request.user, projectId: project.id, folderId: null };
-
-		const imported = await this.importOrchestrator.import({
-			context,
-			folders,
-			workflows,
-			credentialRequest,
-			options: request,
-		});
-
-		emitPackageImportedEvent(this.eventService, {
-			request,
-			context,
-			manifest,
-			imported,
-			credentialRequest,
-		});
-
-		return imported;
+		return { context, folders, workflows, credentialRequest, options: request };
 	}
 
 	private assertAdequatePermissions(

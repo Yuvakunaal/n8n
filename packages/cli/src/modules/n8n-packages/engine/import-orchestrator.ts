@@ -1,5 +1,6 @@
 import { Service } from '@n8n/di';
 
+import { toImportBlockedError } from './import-blocked.error';
 import { CredentialImporter } from '../entities/credential/credential-importer';
 import { workflowsBlockedFromPublish } from '../entities/credential/credential-missing-mode';
 import type {
@@ -8,8 +9,12 @@ import type {
 	CredentialResolution,
 	CredentialResolutionFailure,
 } from '../entities/credential/credential.types';
+import type {
+	FolderImportContext,
+	FolderImportPlan,
+	PreparedFolder,
+} from '../entities/folder/folder-import.types';
 import { FolderImporter } from '../entities/folder/folder-importer';
-import type { FolderImportPlan, PreparedFolder } from '../entities/folder/folder-import.types';
 import type {
 	PreparedWorkflow,
 	WorkflowImportOutcome,
@@ -26,7 +31,6 @@ import type {
 	ImportWorkflowProperties,
 	PackageImportBindings,
 } from '../n8n-packages.types';
-import { toImportBlockedError } from './import-blocked.error';
 
 export interface ImportOrchestrationInput {
 	context: ImportContext;
@@ -44,6 +48,20 @@ export interface ImportOrchestrationResult {
 }
 
 /**
+ * A resolved-but-not-yet-written import of one scope, produced by {@link ImportOrchestrator.plan} and
+ * consumed by {@link ImportOrchestrator.apply}. Carries every subsystem's plan plus the blocking issues
+ * that must be empty before it may be applied.
+ */
+export interface ImportPlan {
+	input: ImportOrchestrationInput;
+	folderContext: FolderImportContext;
+	credentialPlan: CredentialResolution;
+	workflowPlan: WorkflowImportPlan;
+	folderPlan: FolderImportPlan;
+	blockingIssues: BlockingIssue[];
+}
+
+/**
  * Coordinates the credential, folder, and workflow importers to bring a package's
  * contents into one resolved project scope
  */
@@ -57,6 +75,19 @@ export class ImportOrchestrator {
 	) {}
 
 	async import(input: ImportOrchestrationInput): Promise<ImportOrchestrationResult> {
+		const plan = await this.plan(input);
+		if (plan.blockingIssues.length > 0) {
+			throw toImportBlockedError(plan.blockingIssues);
+		}
+		return await this.apply(plan);
+	}
+
+	/**
+	 * Resolves what the import would do without writing anything — matches credentials, workflows, and
+	 * folders against the target scope and collects every blocking issue. Separated from {@link apply}
+	 * so a caller importing several scopes can gate them all before applying any (see ProjectPackageImporter).
+	 */
+	async plan(input: ImportOrchestrationInput): Promise<ImportPlan> {
 		const { context, folders, workflows, credentialRequest, options } = input;
 
 		// PublishAll requires publish scope up front; other policies are checked per workflow.
@@ -78,9 +109,13 @@ export class ImportOrchestrator {
 			folderPlan,
 		);
 
-		if (blockingIssues.length > 0) {
-			throw toImportBlockedError(blockingIssues);
-		}
+		return { input, folderContext, credentialPlan, workflowPlan, folderPlan, blockingIssues };
+	}
+
+	/** Writes a {@link plan} into n8n: folders, then credentials, then workflows (with publishing). */
+	async apply(plan: ImportPlan): Promise<ImportOrchestrationResult> {
+		const { input, folderContext, credentialPlan, workflowPlan, folderPlan } = plan;
+		const { context, credentialRequest, options } = input;
 
 		const folderSummaries = await this.folderImporter.apply(folderContext, folderPlan);
 
