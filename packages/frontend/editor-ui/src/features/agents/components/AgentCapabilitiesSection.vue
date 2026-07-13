@@ -21,6 +21,8 @@ import type { ToolMenuItem, ToolOpenTarget, ToolRow } from './AgentCapabilitiesS
 import { buildToolRows } from './AgentCapabilitiesSection.utils';
 import AgentChipButton from './AgentChipButton.vue';
 
+export type AgentCapabilitySection = 'tools' | 'tasks' | 'skills' | 'subAgents';
+
 const props = withDefaults(
 	defineProps<{
 		config: AgentJsonConfig | null;
@@ -33,9 +35,19 @@ const props = withDefaults(
 		isPublished: boolean;
 		taskRefs?: AgentJsonTaskConfig[];
 		reloadKey?: number;
+		sections?: AgentCapabilitySection[];
 	}>(),
-	{ disabled: false, taskRefs: () => [] },
+	{
+		disabled: false,
+		taskRefs: () => [],
+		sections: () => ['tools', 'skills', 'subAgents', 'tasks'],
+	},
 );
+
+const visibleSections = computed(() => new Set(props.sections));
+function showSection(section: AgentCapabilitySection): boolean {
+	return visibleSections.value.has(section);
+}
 
 const emit = defineEmits<{
 	'open-tool': [target: ToolOpenTarget];
@@ -125,12 +137,12 @@ async function reloadTasks() {
 }
 
 onMounted(() => {
-	void reloadTasks();
-	void ensureProjectAgentsLoaded().catch(() => {});
+	if (showSection('tasks')) void reloadTasks();
+	if (showSection('subAgents')) void ensureProjectAgentsLoaded().catch(() => {});
 });
 
 watch([() => props.reloadKey, () => props.projectId, () => props.agentId], () => {
-	void reloadTasks();
+	if (showSection('tasks')) void reloadTasks();
 });
 
 function openTaskModal(task: TaskRow | null) {
@@ -381,8 +393,8 @@ function openExistingSubAgentModal(subAgent: { id: string; name: string; useWhen
 			:inert="props.disabled || undefined"
 			data-testid="agent-capabilities-section"
 		>
-			<div :class="$style.capabilityRow">
-				<N8nText bold v-if="toolRows.length > 0" :class="$style.rowLabel">
+			<div v-if="showSection('tools')" :class="$style.capabilityRow">
+				<N8nText v-if="toolRows.length > 0" bold :class="$style.rowLabel">
 					{{ i18n.baseText('agents.builder.tools.title') }}
 				</N8nText>
 
@@ -441,6 +453,7 @@ function openExistingSubAgentModal(subAgent: { id: string; name: string; useWhen
 					</template>
 
 					<N8nTooltip
+						v-if="!props.disabled"
 						:disabled="!hasTools"
 						:content="i18n.baseText('agents.builder.tools.add')"
 						placement="top"
@@ -465,8 +478,8 @@ function openExistingSubAgentModal(subAgent: { id: string; name: string; useWhen
 				</div>
 			</div>
 
-			<div :class="$style.capabilityRow">
-				<N8nText bold v-if="skills.length > 0" :class="$style.rowLabel">
+			<div v-if="showSection('skills')" :class="$style.capabilityRow">
+				<N8nText v-if="skills.length > 0" bold :class="$style.rowLabel">
 					{{ i18n.baseText('agents.builder.skills.title') }}
 				</N8nText>
 
@@ -483,6 +496,7 @@ function openExistingSubAgentModal(subAgent: { id: string; name: string; useWhen
 					</AgentChipButton>
 
 					<N8nTooltip
+						v-if="!props.disabled"
 						:disabled="!hasSkills"
 						:content="i18n.baseText('agents.builder.skills.add')"
 						placement="top"
@@ -506,8 +520,8 @@ function openExistingSubAgentModal(subAgent: { id: string; name: string; useWhen
 					</N8nTooltip>
 				</div>
 			</div>
-			<div :class="$style.capabilityRow">
-				<N8nText bold v-if="selectedSubAgents.length > 0" :class="$style.rowLabel">
+			<div v-if="showSection('subAgents')" :class="$style.capabilityRow">
+				<N8nText v-if="selectedSubAgents.length > 0" bold :class="$style.rowLabel">
 					{{ i18n.baseText('agents.builder.subAgents.title') }}
 				</N8nText>
 
@@ -547,8 +561,8 @@ function openExistingSubAgentModal(subAgent: { id: string; name: string; useWhen
 					</N8nTooltip>
 				</div>
 			</div>
-			<div :class="$style.capabilityRow">
-				<N8nText bold v-if="taskRows.length > 0" :class="$style.rowLabel">
+			<div v-if="showSection('tasks')" :class="$style.capabilityRow">
+				<N8nText v-if="taskRows.length > 0" bold :class="$style.rowLabel">
 					{{ i18n.baseText('agents.builder.tasks.title') }}
 				</N8nText>
 
