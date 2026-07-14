@@ -12,6 +12,8 @@ import { Container } from '@n8n/di';
 
 import { ForbiddenError } from '@/errors/response-errors/forbidden.error';
 import { UnprocessableRequestError } from '@/errors/response-errors/unprocessable.error';
+import { EventService } from '@/events/event.service';
+import type { RelayEventMap } from '@/events/maps/relay.event-map';
 import { createOwner } from '@test-integration/db/users';
 import { LicenseMocker } from '@test-integration/license';
 
@@ -180,6 +182,23 @@ describe('project shell import', () => {
 		]);
 		expect(await Container.get(ProjectRepository).count({ where: { type: 'team' } })).toBe(1);
 		expect((await findProject('P1'))?.name).toBe('brie renamed');
+	});
+
+	it('rejects a project package whose manifest project id disagrees with its project.json', async () => {
+		const packageBuffer = await buildEntityPackageBuffer({
+			projects: [
+				{ target: 'projects/p', project: serializedProject({ id: 'real-id', name: 'p' }) },
+			],
+			// Manifest points the same target at a different id than project.json declares. The project is
+			// created under project.json's id, but its contents scope by manifest id — so they must agree.
+			manifestExtras: { projects: [{ id: 'manifest-id', name: 'p', target: 'projects/p' }] },
+		});
+
+		await expect(importProjects(owner, packageBuffer)).rejects.toThrow(
+			/declares id "real-id" but the manifest lists it as "manifest-id"/,
+		);
+		// Rejected while parsing, before any project shell is created.
+		expect(await Container.get(ProjectRepository).count({ where: { type: 'team' } })).toBe(0);
 	});
 
 	it('rejects a project package when the API key lacks the project:create scope', async () => {
@@ -413,5 +432,40 @@ describe('project shell import', () => {
 		expect(await findFolder('FB')).toBeNull();
 		// (Project shells are created before content planning — that residue is accepted; content is not.)
 		expect(await findProject('P1')).not.toBeNull();
+	});
+
+	it('emits a single n8n-package-imported event aggregating every project in the package', async () => {
+		const packageBuffer = await buildEntityPackageBuffer({
+			projects: [
+				{ target: 'projects/brie', project: serializedProject({ id: 'P1', name: 'brie' }) },
+				{ target: 'projects/stilton', project: serializedProject({ id: 'P2', name: 'stilton' }) },
+			],
+			workflows: [
+				{
+					target: 'projects/brie/workflows/wfa',
+					workflow: serializedWorkflow({ id: 'WFA', name: 'wfa' }),
+				},
+				{
+					target: 'projects/stilton/workflows/wfb',
+					workflow: serializedWorkflow({ id: 'WFB', name: 'wfb' }),
+				},
+			],
+		});
+
+		const emitSpy = vi.spyOn(Container.get(EventService), 'emit');
+		try {
+			await importProjects(owner, packageBuffer);
+
+			const importedEvents = emitSpy.mock.calls.filter(([name]) => name === 'n8n-package-imported');
+			expect(importedEvents).toHaveLength(1);
+
+			const payload = importedEvents[0][1] as RelayEventMap['n8n-package-imported'];
+			expect(payload.projectIds.sort()).toEqual(['P1', 'P2']);
+			expect(payload.workflowIds).toHaveLength(2);
+			expect(payload.folderId).toBeNull();
+			expect(payload.counts.workflows.created).toBe(2);
+		} finally {
+			emitSpy.mockRestore();
+		}
 	});
 });

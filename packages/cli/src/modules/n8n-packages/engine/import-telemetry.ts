@@ -6,30 +6,45 @@ import type { ImportContext, ImportPackageRequest } from '../n8n-packages.types'
 import type { ImportOrchestrationResult } from './import-orchestrator';
 import type { PackageManifest } from '../spec/manifest.schema';
 
-/**
- * Emits the `n8n-package-imported` telemetry event for one imported scope. Shared by the workflow- and
- * project-package importers (a project package emits once per project, keyed to that project's scope).
- */
+export interface PackageImportScope {
+	context: ImportContext;
+	imported: ImportOrchestrationResult;
+	credentialRequest: CredentialBindingRequest;
+}
+
 export function emitPackageImportedEvent(
 	eventService: EventService,
 	params: {
 		request: ImportPackageRequest;
-		context: ImportContext;
 		manifest: PackageManifest;
-		imported: ImportOrchestrationResult;
-		credentialRequest: CredentialBindingRequest;
+		scopes: PackageImportScope[];
 	},
 ): void {
-	const { request, context, manifest, imported, credentialRequest } = params;
-	const { workflowOutcomes, credentialResult } = imported;
+	const { request, manifest, scopes } = params;
+
+	const workflowOutcomes = scopes.flatMap(({ imported }) => imported.workflowOutcomes);
+	const credentialResults = scopes.map(({ imported }) => imported.credentialResult);
 	const importedWorkflows = workflowOutcomes.filter(({ status }) => status !== 'skipped');
 	const countByStatus = (status: WorkflowImportOutcome['status']) =>
 		workflowOutcomes.filter((outcome) => outcome.status === status).length;
+	const credentialRequirements = scopes.reduce(
+		(total, { credentialRequest }) => total + (credentialRequest.requirements?.length ?? 0),
+		0,
+	);
+
+	const matchedCredentialIds = credentialResults.flatMap(({ matched, bindings }) =>
+		matched.map((sourceId) => bindings.get(sourceId)!),
+	);
+	const createdCredentialIds = credentialResults.flatMap(({ stubbed, bindings }) =>
+		stubbed.map((sourceId) => bindings.get(sourceId)!),
+	);
+
+	const folderId = scopes.length === 1 ? scopes[0].context.folderId : null;
 
 	eventService.emit('n8n-package-imported', {
-		user: context.user,
-		projectId: context.projectId,
-		folderId: context.folderId,
+		user: request.user,
+		projectIds: scopes.map(({ context }) => context.projectId),
+		folderId,
 		workflowIds: importedWorkflows.map(({ workflow }) => workflow.id),
 		options: {
 			workflowConflictPolicy: request.workflowConflictPolicy,
@@ -41,8 +56,8 @@ export function emitPackageImportedEvent(
 		packageSourceId: manifest.sourceId,
 		packageVersion: manifest.packageFormatVersion,
 		credentialIds: {
-			matched: credentialResult.matched.map((sourceId) => credentialResult.bindings.get(sourceId)!),
-			created: credentialResult.stubbed.map((sourceId) => credentialResult.bindings.get(sourceId)!),
+			matched: matchedCredentialIds,
+			created: createdCredentialIds,
 			updated: [],
 		},
 		counts: {
@@ -52,9 +67,9 @@ export function emitPackageImportedEvent(
 				skipped: countByStatus('skipped'),
 			},
 			credentials: {
-				matched: credentialResult.matched.length,
-				created: credentialResult.stubbed.length,
-				requirements: credentialRequest.requirements?.length ?? 0,
+				matched: matchedCredentialIds.length,
+				created: createdCredentialIds.length,
+				requirements: credentialRequirements,
 			},
 		},
 	});

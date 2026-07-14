@@ -17,7 +17,7 @@ import { ImportOrchestrator } from './import-orchestrator';
 import {
 	assertPackageImportApiKeyScopes,
 	buildImportResult,
-	identifyRequirements,
+	identifyRequirementsForWorkflows,
 	toImportedWorkflowSummaries,
 	toPackageSummary,
 } from './import-result';
@@ -60,7 +60,7 @@ export class WorkflowPackageImporter {
 
 		const workflows = await this.packageParser.getWorkflows(reader);
 		const credentialRequest: CredentialBindingRequest = {
-			requirements: identifyRequirements(manifest.requirements?.credentials, workflows),
+			requirements: identifyRequirementsForWorkflows(manifest.requirements?.credentials, workflows),
 			matchingMode: request.credentialMatchingMode,
 			missingMode: request.credentialMissingMode,
 			credentialBindings: request.bindings?.credentials,
@@ -76,10 +76,8 @@ export class WorkflowPackageImporter {
 
 		emitPackageImportedEvent(this.eventService, {
 			request,
-			context,
 			manifest,
-			imported,
-			credentialRequest,
+			scopes: [{ context, imported, credentialRequest }],
 		});
 
 		return buildImportResult({

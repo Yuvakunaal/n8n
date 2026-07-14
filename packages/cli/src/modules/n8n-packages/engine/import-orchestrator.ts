@@ -47,11 +47,6 @@ export interface ImportOrchestrationResult {
 	credentialResult: CredentialApplyResult;
 }
 
-/**
- * A resolved-but-not-yet-written import of one scope, produced by {@link ImportOrchestrator.plan} and
- * consumed by {@link ImportOrchestrator.apply}. Carries every subsystem's plan plus the blocking issues
- * that must be empty before it may be applied.
- */
 export interface ImportPlan {
 	input: ImportOrchestrationInput;
 	folderContext: FolderImportContext;
@@ -82,15 +77,9 @@ export class ImportOrchestrator {
 		return await this.apply(plan);
 	}
 
-	/**
-	 * Resolves what the import would do without writing anything — matches credentials, workflows, and
-	 * folders against the target scope and collects every blocking issue. Separated from {@link apply}
-	 * so a caller importing several scopes can gate them all before applying any (see ProjectPackageImporter).
-	 */
 	async plan(input: ImportOrchestrationInput): Promise<ImportPlan> {
 		const { context, folders, workflows, credentialRequest, options } = input;
 
-		// PublishAll requires publish scope up front; other policies are checked per workflow.
 		await this.workflowPublisher.assertCanPublish(
 			context.user,
 			context.projectId,
@@ -112,7 +101,6 @@ export class ImportOrchestrator {
 		return { input, folderContext, credentialPlan, workflowPlan, folderPlan, blockingIssues };
 	}
 
-	/** Writes a {@link plan} into n8n: folders, then credentials, then workflows (with publishing). */
 	async apply(plan: ImportPlan): Promise<ImportOrchestrationResult> {
 		const { input, folderContext, credentialPlan, workflowPlan, folderPlan } = plan;
 		const { context, credentialRequest, options } = input;

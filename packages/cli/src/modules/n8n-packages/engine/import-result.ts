@@ -25,10 +25,6 @@ export function toPackageSummary(manifest: PackageManifest): ImportPackageSummar
 	};
 }
 
-/**
- * Maps a scope's workflow outcomes to wire summaries. `projectId` stamps the scope the workflows
- * landed in — one target project for a workflow package, or each project's own id for a project package.
- */
 export function toImportedWorkflowSummaries(
 	outcomes: WorkflowImportOutcome[],
 	projectId: string,
@@ -45,7 +41,6 @@ export function toImportedWorkflowSummaries(
 	}));
 }
 
-/** Assembles the wire {@link ImportResult} from the (already per-scope-mapped) entity summaries. */
 export function buildImportResult(input: {
 	package: ImportPackageSummary;
 	workflows: ImportedWorkflowSummary[];
@@ -80,8 +75,7 @@ export function assertPackageImportApiKeyScopes(
 	}
 }
 
-/** Keeps only the credential requirements used by the imported workflows, trimming `usedByWorkflows` to match. */
-export function identifyRequirements(
+export function identifyRequirementsForWorkflows(
 	requirements: PackageCredentialRequirement[] | undefined,
 	workflows: PreparedWorkflow[],
 ): PackageCredentialRequirement[] | undefined {
