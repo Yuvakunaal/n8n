@@ -1,6 +1,7 @@
 import type { GlobalConfig } from '@n8n/config';
 import { mock } from 'vitest-mock-extended';
 
+import type { McpConfig } from '../mcp.config';
 import type { McpSettingsService } from '../mcp.settings.service';
 import type { UrlService } from '@/services/url.service';
 
@@ -15,10 +16,17 @@ const makeGlobalConfig = ({ builderEnabled = true, tagsDisabled = false } = {}) 
 describe('McpProtectedResource', () => {
 	const urlService = mock<UrlService>();
 	const mcpSettingsService = mock<McpSettingsService>();
-	const resource = new McpProtectedResource(urlService, mcpSettingsService, makeGlobalConfig());
+	const mcpConfig = mock<McpConfig>();
+	const resource = new McpProtectedResource(
+		urlService,
+		mcpSettingsService,
+		makeGlobalConfig(),
+		mcpConfig,
+	);
 
 	beforeEach(() => {
 		vi.clearAllMocks();
+		mcpConfig.baseUrl = '';
 	});
 
 	describe('getScopeTools', () => {
@@ -35,6 +43,7 @@ describe('McpProtectedResource', () => {
 				urlService,
 				mcpSettingsService,
 				makeGlobalConfig({ builderEnabled: false, tagsDisabled: true }),
+				mcpConfig,
 			);
 
 			const scopeTools = limitedResource.getScopeTools();
@@ -87,5 +96,36 @@ describe('McpProtectedResource', () => {
 
 	it('should be the default audience for resource-less token requests', () => {
 		expect(resource.isDefault).toBe(true);
+	});
+
+	describe('with a dedicated MCP base URL (split-hostname deployments)', () => {
+		beforeEach(() => {
+			urlService.getInstanceBaseUrl.mockReturnValue('https://n8n.example.com');
+			mcpConfig.baseUrl = 'https://n8n-mcp.example.com';
+		});
+
+		it('should use the configured base URL as the canonical resource', () => {
+			expect(resource.getResourceUrl()).toBe('https://n8n-mcp.example.com/mcp-server/http');
+		});
+
+		it('should keep serving the instance-base-URL-derived resource', () => {
+			expect(resource.getResourceUrls()).toEqual([
+				'https://n8n-mcp.example.com/mcp-server/http',
+				'https://n8n.example.com/mcp-server/http',
+			]);
+		});
+
+		it('should accept audiences for both resource URLs plus the legacy audience', () => {
+			expect(resource.getAudiences()).toEqual([
+				'https://n8n-mcp.example.com/mcp-server/http',
+				'https://n8n.example.com/mcp-server/http',
+				'mcp-server-api',
+			]);
+		});
+
+		it('should collapse to a single resource URL when unset', () => {
+			mcpConfig.baseUrl = '';
+			expect(resource.getResourceUrls()).toEqual(['https://n8n.example.com/mcp-server/http']);
+		});
 	});
 });
