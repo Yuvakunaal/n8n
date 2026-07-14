@@ -3,6 +3,7 @@ import { GlobalConfig } from '@n8n/config';
 import { Service } from '@n8n/di';
 
 import { BUILDER_TOOLS, TOOLS_BY_SCOPE } from './mcp-scopes';
+import { McpConfig } from './mcp.config';
 import { McpSettingsService } from './mcp.settings.service';
 import type { ProtectedResource } from '@/services/protected-resource.registry';
 import { UrlService } from '@/services/url.service';
@@ -48,6 +49,7 @@ export class McpProtectedResource implements ProtectedResource {
 		private readonly urlService: UrlService,
 		private readonly mcpSettingsService: McpSettingsService,
 		private readonly globalConfig: GlobalConfig,
+		private readonly mcpConfig: McpConfig,
 	) {}
 
 	/**
@@ -70,14 +72,30 @@ export class McpProtectedResource implements ProtectedResource {
 	}
 
 	getResourceUrl(): string {
+		// A dedicated MCP base URL (split-hostname deployments) takes precedence
+		// as the canonical resource: it is what clients are told to use.
+		if (this.mcpConfig.baseUrl) {
+			return `${this.mcpConfig.baseUrl}${MCP_RESOURCE_PATH}`;
+		}
 		const baseUrl = this.urlService.getInstanceBaseUrl().replace(/\/$/, '');
 		return `${baseUrl}${MCP_RESOURCE_PATH}`;
+	}
+
+	/**
+	 * Canonical resource URL first, then the instance-base-URL-derived one when
+	 * a dedicated MCP base URL is configured — clients connecting through the
+	 * main hostname (and tokens minted before the config change) must keep
+	 * working.
+	 */
+	getResourceUrls(): string[] {
+		const instanceUrl = `${this.urlService.getInstanceBaseUrl().replace(/\/$/, '')}${MCP_RESOURCE_PATH}`;
+		return [...new Set([this.getResourceUrl(), instanceUrl])];
 	}
 
 	getAudiences(): string[] {
 		// The legacy audience stays scoped to this resource only — it must never
 		// be accepted at another protected resource's gate.
-		return [this.getResourceUrl(), LEGACY_MCP_AUDIENCE];
+		return [...this.getResourceUrls(), LEGACY_MCP_AUDIENCE];
 	}
 
 	async getAllowedRedirectUris(): Promise<string[]> {
