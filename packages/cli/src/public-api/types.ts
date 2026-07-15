@@ -397,4 +397,5 @@ export declare namespace SecurityPolicyRequest {
 
 export declare namespace SsoSamlRequest {
 	type Get = AuthenticatedRequest;
+	type Set = AuthenticatedRequest<{}, {}, Record<string, unknown>>;
 }
