@@ -1,11 +1,12 @@
-import type { IExecuteFunctions, INode, INodeParameterResourceLocator } from 'n8n-workflow';
+import type { INode, INodeParameterResourceLocator } from 'n8n-workflow';
 import { NodeOperationError } from 'n8n-workflow';
 
+import type { AuthContext } from './interfaces';
 import { microsoftApiRequest } from '../transport';
 
 // One lookup per distinct pasted address per execution — without this, a
 // multi-item run repeats the same resolution call and risks throttling
-const workbookRootCache = new WeakMap<IExecuteFunctions, Map<string, string>>();
+const workbookRootCache = new WeakMap<AuthContext, Map<string, string>>();
 
 /**
  * Guards a user-supplied value destined for a URL path segment: rejects empty
@@ -31,11 +32,13 @@ export function validatePathSegment(node: INode, label: string, value: string): 
  * Resolves the workbook fields to the Graph root every request hangs off:
  * `/v1.0/sites/{site}/drives/{drive}/items/{item}`. A pasted address costs one
  * lookup (Graph's sharing-URL exchange); IDs are used as given.
+ *
+ * `itemIndex` defaults to 0 so load-options contexts (list-search methods for
+ * the sheet/table dropdowns), which have no item index, can call this too —
+ * `AuthContext.getNodeParameter`'s 2nd arg is itemIndex in execute and the
+ * fallback in load-options; 0 is a valid, harmless value either way.
  */
-export async function resolveWorkbookRoot(
-	this: IExecuteFunctions,
-	itemIndex: number,
-): Promise<string> {
+export async function resolveWorkbookRoot(this: AuthContext, itemIndex = 0): Promise<string> {
 	const workbook = this.getNodeParameter('workbook', itemIndex) as INodeParameterResourceLocator;
 	const workbookValue = String(workbook.value ?? '').trim();
 
