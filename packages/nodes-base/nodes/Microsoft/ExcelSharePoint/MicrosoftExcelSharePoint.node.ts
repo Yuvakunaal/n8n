@@ -6,6 +6,7 @@ import type {
 } from 'n8n-workflow';
 import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
+import * as workbook from './actions/workbook/Workbook.resource';
 import * as readRows from './actions/worksheet/readRows.operation';
 
 // Shell for the Excel-on-SharePoint build. Registered but hidden: workflows
@@ -79,6 +80,10 @@ export class MicrosoftExcelSharePoint implements INodeType {
 						name: 'Sheet',
 						value: 'worksheet',
 					},
+					{
+						name: 'Workbook',
+						value: 'workbook',
+					},
 				],
 				default: 'worksheet',
 			},
@@ -104,6 +109,7 @@ export class MicrosoftExcelSharePoint implements INodeType {
 			},
 
 			...readRows.description,
+			...workbook.description,
 		],
 	};
 
@@ -114,6 +120,14 @@ export class MicrosoftExcelSharePoint implements INodeType {
 
 		if (resource === 'worksheet' && operation === 'readRows') {
 			return [await readRows.execute.call(this, items)];
+		}
+
+		if (resource === 'workbook' && operation === 'addWorksheet') {
+			return [await workbook.addWorksheet.execute.call(this, items)];
+		}
+
+		if (resource === 'workbook' && operation === 'deleteWorkbook') {
+			return [await workbook.deleteWorkbook.execute.call(this, items)];
 		}
 
 		throw new NodeOperationError(
