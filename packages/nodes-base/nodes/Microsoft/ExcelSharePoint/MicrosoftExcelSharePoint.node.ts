@@ -6,6 +6,7 @@ import type {
 } from 'n8n-workflow';
 import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
+import * as append from './actions/worksheet/append.operation';
 import * as readRows from './actions/worksheet/readRows.operation';
 
 // Shell for the Excel-on-SharePoint build. Registered but hidden: workflows
@@ -94,6 +95,12 @@ export class MicrosoftExcelSharePoint implements INodeType {
 				},
 				options: [
 					{
+						name: 'Append',
+						value: 'append',
+						description: 'Append rows to the end of a sheet',
+						action: 'Append rows to sheet',
+					},
+					{
 						name: 'Get Rows',
 						value: 'readRows',
 						description: 'Read rows from a range or the used range of a sheet',
@@ -103,6 +110,7 @@ export class MicrosoftExcelSharePoint implements INodeType {
 				default: 'readRows',
 			},
 
+			...append.description,
 			...readRows.description,
 		],
 	};
@@ -111,6 +119,10 @@ export class MicrosoftExcelSharePoint implements INodeType {
 		const items = this.getInputData();
 		const resource = this.getNodeParameter('resource', 0);
 		const operation = this.getNodeParameter('operation', 0);
+
+		if (resource === 'worksheet' && operation === 'append') {
+			return [await append.execute.call(this, items)];
+		}
 
 		if (resource === 'worksheet' && operation === 'readRows') {
 			return [await readRows.execute.call(this, items)];
