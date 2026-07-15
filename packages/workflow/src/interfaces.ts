@@ -1551,6 +1551,7 @@ export interface IPairedItemData {
 }
 
 export const ChatNodeMessageType = {
+	MESSAGE: 'message',
 	WITH_BUTTONS: 'with-buttons',
 } as const;
 
