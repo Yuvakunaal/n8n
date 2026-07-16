@@ -1,6 +1,7 @@
 import type { ILoadOptionsFunctions, INodeListSearchResult } from 'n8n-workflow';
 
 import { listSearchPage } from '../helpers/listSearch';
+import type { GraphTable, GraphWorksheet } from '../helpers/interfaces';
 import { resolveWorkbookRoot, validatePathSegment } from '../helpers/utils';
 
 export async function getSheets(
@@ -10,10 +11,10 @@ export async function getSheets(
 ): Promise<INodeListSearchResult> {
 	const workbookRoot = await resolveWorkbookRoot.call(this);
 
-	return await listSearchPage.call(
+	return await (listSearchPage<GraphWorksheet>).call(
 		this,
 		`${workbookRoot}/workbook/worksheets`,
-		(sheet) => ({ name: String(sheet.name), value: String(sheet.id) }),
+		(sheet) => ({ name: sheet.name, value: sheet.id }),
 		filter,
 		paginationToken,
 	);
@@ -31,10 +32,10 @@ export async function getTables(
 		this.getNodeParameter('worksheet', undefined, { extractValue: true }) as string,
 	);
 
-	return await listSearchPage.call(
+	return await (listSearchPage<GraphTable>).call(
 		this,
 		`${workbookRoot}/workbook/worksheets/${encodeURIComponent(worksheetId)}/tables`,
-		(table) => ({ name: String(table.name), value: String(table.id) }),
+		(table) => ({ name: table.name, value: table.id }),
 		filter,
 		paginationToken,
 	);
