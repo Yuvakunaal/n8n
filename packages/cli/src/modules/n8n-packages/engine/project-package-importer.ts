@@ -26,6 +26,7 @@ import {
 	assertPackageImportApiKeyScopes,
 	buildImportResult,
 	identifyRequirementsForWorkflows,
+	scopeCredentialBindingsToRequirements,
 	toImportedWorkflowSummaries,
 	toPackageSummary,
 } from './import-result';
@@ -109,11 +110,20 @@ export class ProjectPackageImporter {
 		const folders = await this.packageParser.getFolders(reader, basePrefix);
 		const workflows = await this.packageParser.getWorkflows(reader, basePrefix);
 
+		// Requirements and bindings are both scoped to this project's workflows so another project's
+		// binding is not seen as an orphan here (which would block the whole multi-project import).
+		const requirements = identifyRequirementsForWorkflows(
+			manifest.requirements?.credentials,
+			workflows,
+		);
 		const credentialRequest: CredentialBindingRequest = {
-			requirements: identifyRequirementsForWorkflows(manifest.requirements?.credentials, workflows),
+			requirements,
 			matchingMode: request.credentialMatchingMode,
 			missingMode: request.credentialMissingMode,
-			credentialBindings: request.bindings?.credentials,
+			credentialBindings: scopeCredentialBindingsToRequirements(
+				request.bindings?.credentials,
+				requirements,
+			),
 		};
 
 		return {

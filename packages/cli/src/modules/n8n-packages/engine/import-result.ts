@@ -6,6 +6,7 @@ import type {
 } from '../entities/workflow/workflow-import.types';
 import { serializeBindings } from '../n8n-packages.types';
 import type {
+	ImportBindingMap,
 	ImportCredentialSummary,
 	ImportedFolderSummary,
 	ImportedProjectSummary,
@@ -88,4 +89,19 @@ export function identifyRequirementsForWorkflows(
 			usedByWorkflows: requirement.usedByWorkflows.filter((id) => importedIds.has(id)),
 		}))
 		.filter((requirement) => requirement.usedByWorkflows.length > 0);
+}
+
+/**
+ * Restricts explicit credential bindings to those a scope's requirements declare. A project package
+ * shares one binding map across every project, but each project only sees its own requirements — without
+ * this, a binding for a credential used solely in another project looks orphaned and blocks the import.
+ */
+export function scopeCredentialBindingsToRequirements(
+	bindings: ImportBindingMap | undefined,
+	requirements: PackageCredentialRequirement[] | undefined,
+): ImportBindingMap | undefined {
+	if (!bindings) return undefined;
+
+	const requirementIds = new Set((requirements ?? []).map((requirement) => requirement.id));
+	return new Map([...bindings].filter(([sourceId]) => requirementIds.has(sourceId)));
 }
