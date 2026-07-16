@@ -37,6 +37,8 @@ export type ToolCallData = {
 		type: string | number | true | object;
 	};
 	observation: string;
+	/** The batch item index this tool call belongs to, used to prevent cross-item history leakage */
+	itemIndex?: number;
 };
 
 /**
