@@ -8,10 +8,18 @@ export const listRLC: INodeProperties = {
 	name: 'list',
 	type: 'resourceLocator',
 	required: true,
-	default: { mode: 'id', value: '' },
+	default: { mode: 'list', value: '' },
 	description: 'The list to operate on. You can use the list title in place of the ID.',
-	// The list-search follow-up prepends a searchable mode to this same field.
 	modes: [
+		{
+			displayName: 'From List',
+			name: 'list',
+			type: 'list',
+			typeOptions: {
+				searchListMethod: 'getLists',
+				searchable: true,
+			},
+		},
 		{
 			displayName: 'By ID or Title',
 			name: 'id',

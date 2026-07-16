@@ -126,10 +126,13 @@ export async function getSites(
 
 // One URL lookup per distinct site URL per execution — without this, a
 // multi-item run doubles its Graph request volume and risks 429 throttling.
-const siteIdCache = new WeakMap<IExecuteFunctions, Map<string, string>>();
+const siteIdCache = new WeakMap<IExecuteFunctions | ILoadOptionsFunctions, Map<string, string>>();
 
 /** Resolves the `site` field to a Graph site ID; URL mode costs one lookup. */
-export async function resolveSiteId(this: IExecuteFunctions, itemIndex: number): Promise<string> {
+export async function resolveSiteId(
+	this: IExecuteFunctions | ILoadOptionsFunctions,
+	itemIndex: number,
+): Promise<string> {
 	const site = this.getNodeParameter('site', itemIndex) as INodeParameterResourceLocator;
 	const value = String(site.value ?? '').trim();
 	if (site.mode !== 'url') {
