@@ -1,9 +1,4 @@
-import {
-	type IDataObject,
-	type IExecuteFunctions,
-	type INodeExecutionData,
-	NodeOperationError,
-} from 'n8n-workflow';
+import { type IExecuteFunctions, type INodeExecutionData, NodeOperationError } from 'n8n-workflow';
 
 import * as list from './list';
 import type { MicrosoftSharePointType } from './node.type';
@@ -24,24 +19,18 @@ export async function router(this: IExecuteFunctions): Promise<INodeExecutionDat
 	for (let i = 0; i < items.length; i++) {
 		try {
 			switch (sharePointTypeData.resource) {
-				case 'list': {
+				case 'list':
 					if (!(sharePointTypeData.operation in list)) {
 						throw new NodeOperationError(
 							this.getNode(),
 							`The operation "${operation}" is not supported!`,
 						);
 					}
-					// get returns a single object, getAll returns an array — widen to a
-					// common shape so TS can resolve .execute.call across both.
-					const listOperation: {
-						execute(
-							this: IExecuteFunctions,
-							itemIndex: number,
-						): Promise<IDataObject | IDataObject[]>;
-					} = list[sharePointTypeData.operation];
-					responseData = await listOperation.execute.call(this, i);
+					// get returns a single object, getAll returns an array — both operations
+					// declare the wider Promise<IDataObject | IDataObject[]> return type so
+					// TS can resolve .execute.call across either one without a local wrapper.
+					responseData = await list[sharePointTypeData.operation].execute.call(this, i);
 					break;
-				}
 				default:
 					throw new NodeOperationError(
 						this.getNode(),
@@ -50,7 +39,7 @@ export async function router(this: IExecuteFunctions): Promise<INodeExecutionDat
 			}
 
 			const executionData = this.helpers.constructExecutionMetaData(
-				this.helpers.returnJsonArray(responseData as IDataObject),
+				this.helpers.returnJsonArray(responseData),
 				{ itemData: { item: i } },
 			);
 

@@ -23,9 +23,13 @@ const displayOptions = { show: { resource: ['list'], operation: ['getAll'] } };
 
 export const description = updateDisplayOptions(displayOptions, properties);
 
-export async function execute(this: IExecuteFunctions, i: number): Promise<IDataObject[]> {
+export async function execute(
+	this: IExecuteFunctions,
+	i: number,
+): Promise<IDataObject | IDataObject[]> {
 	// https://learn.microsoft.com/en-us/graph/api/list-list
 	const siteId = await resolveSiteId.call(this, i);
+	// An empty siteId would hit Graph with a malformed /sites//lists path — fail loudly instead.
 	if (siteId === '') {
 		throw new NodeOperationError(this.getNode(), "The 'Site' parameter is empty", {
 			description: 'Set the site ID or URL and try again.',

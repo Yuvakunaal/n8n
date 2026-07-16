@@ -39,7 +39,10 @@ const displayOptions = {
 
 export const description = updateDisplayOptions(displayOptions, properties);
 
-export async function execute(this: IExecuteFunctions, i: number): Promise<IDataObject> {
+export async function execute(
+	this: IExecuteFunctions,
+	i: number,
+): Promise<IDataObject | IDataObject[]> {
 	// https://learn.microsoft.com/en-us/graph/api/list-get — {list-id} accepts the list ID or title
 	const siteId = await resolveSiteId.call(this, i);
 	const listIdOrTitle = (

@@ -1,13 +1,10 @@
 import type { IDataObject, ILoadOptionsFunctions, INodeListSearchResult } from 'n8n-workflow';
 
-import { escapeODataFilterValue } from '../helpers/utils';
+import { escapeODataFilterValue, type GraphSearchReply } from '../helpers/utils';
 import { resolveSiteId } from '../site';
 import { microsoftApiRequest } from '../transport';
 
-type ListSearchReply = {
-	'@odata.nextLink'?: string;
-	value?: Array<{ id?: string; displayName?: string }>;
-};
+type ListSearchReply = GraphSearchReply<{ id?: string; displayName?: string }>;
 
 /**
  * Searches a site's lists by display name. Resolves `site` via `resolveSiteId`
