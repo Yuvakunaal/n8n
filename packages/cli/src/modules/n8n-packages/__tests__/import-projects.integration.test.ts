@@ -363,11 +363,12 @@ describe('project shell import', () => {
 		});
 
 		// The project workflow's credential requirement resolves in the project scope; under must-preexist
-		// a missing credential blocks the content import (before the folder/workflow are written).
+		// a missing credential blocks the import before anything is written — no folder, no project shell.
 		await expect(importProjects(owner, packageBuffer)).rejects.toBeInstanceOf(
 			UnprocessableRequestError,
 		);
 		expect(await findFolder('FA')).toBeNull();
+		expect(await findProject('P1')).toBeNull();
 	});
 
 	it('imports a project-root workflow (no enclosing folder) at the project root', async () => {
@@ -423,14 +424,42 @@ describe('project shell import', () => {
 			},
 		});
 
-		// The second project's workflow needs a missing credential: every project is planned and gated
-		// before any content is applied, so the first project's folder/workflow must not have been written.
+		// The second project's workflow needs a missing credential: every project is planned and
+		// validated before anything is written, so a block leaves nothing behind — not the first
+		// project's folder/workflow, nor either project shell.
 		await expect(importProjects(owner, packageBuffer)).rejects.toBeInstanceOf(
 			UnprocessableRequestError,
 		);
 		expect(await findFolder('FA')).toBeNull();
 		expect(await findFolder('FB')).toBeNull();
-		// (Project shells are created before content planning — that residue is accepted; content is not.)
+		expect(await findProject('P1')).toBeNull();
+		expect(await findProject('P2')).toBeNull();
+	});
+
+	it('creates a new project under publish-all, planned before the project exists', async () => {
+		const packageBuffer = await buildEntityPackageBuffer({
+			projects: [
+				{ target: 'projects/brie', project: serializedProject({ id: 'P1', name: 'brie' }) },
+			],
+			workflows: [
+				{
+					target: 'projects/brie/workflows/wf',
+					workflow: serializedWorkflow({ id: 'WF', name: 'wf' }),
+				},
+			],
+		});
+
+		// publish-all checks publish permission during planning, which now runs before the project
+		// is created. A project being created has no row to look up, so the import must not fail — its
+		// creator is admin and can always publish.
+		const result = await importProjects(owner, packageBuffer, undefined, {
+			workflowPublishingPolicy: 'publish-all',
+		});
+
+		expect(result.projects).toEqual([
+			{ sourceProjectId: 'P1', localId: 'P1', name: 'brie', status: 'created' },
+		]);
+		expect(result.workflows.find((w) => w.sourceWorkflowId === 'WF')?.projectId).toBe('P1');
 		expect(await findProject('P1')).not.toBeNull();
 	});
 

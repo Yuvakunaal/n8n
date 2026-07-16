@@ -53,12 +53,24 @@ export class ProjectPackageImporter {
 
 		const projects = await this.packageParser.getProjects(reader);
 		const projectPlan = await this.projectImporter.plan(request.user, projects);
-		const projectSummaries = await this.projectImporter.apply(request.user, projectPlan);
+		// Projects the user is creating (vs matching an existing one). They will be admin of these,
+		// so publish is always allowed and the project need not exist while its contents are planned.
+		const pendingCreateIds = new Set(
+			projectPlan.filter((item) => item.action === 'create').map((item) => item.sourceProjectId),
+		);
 
+		// Plan and validate every project's contents before writing anything, so a blocking issue in
+		// any project leaves nothing behind — not folders, workflows, nor the project shells.
 		const planned: Array<{ project: ManifestEntry; plan: ImportPlan }> = [];
 		const blockingIssues: BlockingIssue[] = [];
 		for (const project of manifest.projects ?? []) {
-			const input = await this.buildImportContextForProject(request, reader, manifest, project);
+			const input = await this.buildImportContextForProject(
+				request,
+				reader,
+				manifest,
+				project,
+				pendingCreateIds.has(project.id),
+			);
 			const plan = await this.importOrchestrator.plan(input);
 			planned.push({ project, plan });
 			blockingIssues.push(...plan.blockingIssues);
@@ -66,6 +78,8 @@ export class ProjectPackageImporter {
 		if (blockingIssues.length > 0) {
 			throw toImportBlockedError(blockingIssues);
 		}
+
+		const projectSummaries = await this.projectImporter.apply(request.user, projectPlan);
 
 		const workflows: ImportedWorkflowSummary[] = [];
 		const folders: ImportedFolderSummary[] = [];
@@ -105,6 +119,7 @@ export class ProjectPackageImporter {
 		reader: PackageReader,
 		manifest: PackageManifest,
 		project: ManifestEntry,
+		projectPendingCreation: boolean,
 	): Promise<ImportOrchestrationInput> {
 		const basePrefix = `${project.target}/`;
 		const folders = await this.packageParser.getFolders(reader, basePrefix);
@@ -136,6 +151,7 @@ export class ProjectPackageImporter {
 			workflows,
 			credentialRequest,
 			options: request,
+			projectPendingCreation,
 		};
 	}
 

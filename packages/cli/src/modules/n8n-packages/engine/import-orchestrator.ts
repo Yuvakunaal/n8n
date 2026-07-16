@@ -38,6 +38,8 @@ export interface ImportOrchestrationInput {
 	workflows: PreparedWorkflow[];
 	credentialRequest: CredentialBindingRequest;
 	options: ImportWorkflowProperties & ImportFolderProperties;
+	/** The target project does not exist yet and will be created by this import (project packages). */
+	projectPendingCreation?: boolean;
 }
 
 export interface ImportOrchestrationResult {
@@ -84,6 +86,7 @@ export class ImportOrchestrator {
 			context.user,
 			context.projectId,
 			options.workflowPublishingPolicy,
+			input.projectPendingCreation,
 		);
 
 		const credentialPlan = await this.credentialImporter.plan(context, credentialRequest);
