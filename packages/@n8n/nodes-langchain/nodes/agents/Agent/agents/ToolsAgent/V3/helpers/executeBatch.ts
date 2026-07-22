@@ -132,6 +132,14 @@ export async function executeBatch(
 				};
 			} else {
 				request.actions.push.apply(request.actions, batchResult.actions);
+				// Merge previousRequests from all items so no item's history is dropped
+				if (batchResult.metadata?.previousRequests?.length) {
+					request.metadata ??= {};
+					request.metadata.previousRequests = [
+						...(request.metadata.previousRequests ?? []),
+						...batchResult.metadata.previousRequests,
+					];
+				}
 			}
 			return;
 		}

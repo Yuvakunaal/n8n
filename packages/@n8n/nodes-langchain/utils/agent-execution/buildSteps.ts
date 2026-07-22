@@ -324,7 +324,11 @@ export function buildSteps(
 	const responses = response.actionResponses ?? [];
 
 	if (response.metadata?.previousRequests) {
-		steps.push(...response.metadata.previousRequests);
+		steps.push(
+			...response.metadata.previousRequests.filter(
+				(s) => s.itemIndex === undefined || s.itemIndex === itemIndex,
+			),
+		);
 	}
 
 	// First pass: collect all valid tool responses for this batch
@@ -399,6 +403,7 @@ export function buildSteps(
 				type: toolInput.type || 'tool_call',
 			},
 			observation,
+			itemIndex,
 		});
 	}
 
